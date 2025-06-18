@@ -3,9 +3,13 @@ import soundfile as sf
 import matplotlib.pyplot as plt
 from scipy.signal import butter, filtfilt, freqz
 from scipy.fft import fft, fftfreq
+from pedalboard import Pedalboard, Reverb, Compressor
+from pedalboard.io import AudioFile
+from pedalboard import *
+
 
 # === 1. Cargar archivo de audio ===
-data, fs = sf.read('audioprueba.wav')
+data, fs = sf.read('audio1.wav')
 if len(data.shape) == 2:
     data = data.mean(axis=1)  # Convertir a mono si es estéreo
 
@@ -111,3 +115,72 @@ if max_amplitud > 0:
     amplificado = 0.95 * data_filtrada / max_amplitud
     sf.write('voz_filtrada_amplificada.wav', amplificado, fs)
     print("✅ Versión amplificada guardada como voz_filtrada_amplificada.wav")
+
+
+
+# Aplicar efectos con Pedalboard (compresor + reverb)
+
+
+with AudioFile('voz_filtrada.wav') as f:
+    audio = f.read(f.frames)
+    samplerate = f.samplerate
+
+board = Pedalboard([
+    Compressor(threshold_db=16, ratio=1.5,release_ms=250),
+    NoiseGate(threshold_db=30,ratio=1.5,release_ms=250),
+    LowShelfFilter(cutoff_frequency_hz=400, gain_db=-10,q=1),
+    Gain(gain_db=10),
+])
+
+audio_efectos = board(audio, samplerate)
+
+with AudioFile('voz_filtrada_efectos.wav', 'w', samplerate, audio.shape[0]) as f:
+    f.write(audio_efectos)
+
+print("🎛️ Audio con efectos guardado como voz_filtrada_efectos.wav")
+
+
+#Visualización de la señal con efectos
+# Vector de tiempo para la señal con efectos
+tiempo_efectos = np.linspace(0, len(audio_efectos)/fs, len(audio_efectos))
+
+plt.figure(figsize=(10, 4))
+plt.plot(tiempo[:int(2*fs)], data[:int(2*fs)], label='Original', alpha=0.3)
+plt.plot(tiempo[:int(2*fs)], data_filtrada[:int(2*fs)], label='Filtrada', alpha=0.5)
+plt.plot(tiempo_efectos[:int(2*fs)], audio_efectos[:int(2*fs)], label='Con efectos', color='green')
+plt.xlabel('Tiempo [s]')
+plt.ylabel('Amplitud')
+plt.title('Comparación: Original vs Filtrada vs Efectos')
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+
+#Espectro de frecuencia 
+fft_efectos = np.abs(fft(audio_efectos)) / len(audio_efectos)
+fft_efectos = fft_efectos[:N//2]  # solo parte positiva
+
+plt.figure(figsize=(10, 4))
+plt.plot(f, fft_original, label='Original', alpha=0.4)
+plt.plot(f, fft_filtrada, label='Filtrada', alpha=0.6)
+plt.plot(f, fft_efectos, label='Con efectos', color='green')
+plt.xlabel('Frecuencia [Hz]')
+plt.ylabel('Magnitud')
+plt.title('Espectro de frecuencia después de efectos')
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.xlim(0, fs//2)
+plt.show()
+
+
+#Espectograma de la señal con efectos 
+plt.figure(figsize=(10, 4))
+plt.specgram(audio_efectos, NFFT=1024, Fs=fs, noverlap=512, cmap='plasma')
+plt.colorbar(label='Intensidad [dB]')
+plt.title('Espectrograma - Señal con efectos')
+plt.xlabel('Tiempo [s]')
+plt.ylabel('Frecuencia [Hz]')
+plt.tight_layout()
+plt.show()
